@@ -5,20 +5,30 @@
  * Returns connection state and actions for the UI.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { rollDice as rollDiceLogic } from '../domain/dice.js';
 
-const WS_URL = (() => {
-  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  // In dev, Vite proxies /ws to the game server
-  return `${proto}//${window.location.hostname}:3001`;
-})();
+// Issue 4 fix: WS_URL configurable via environment variable
+const WS_URL = import.meta.env.VITE_WS_URL ||
+  (() => {
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    // In dev, Vite proxies /ws to the game server
+    return `${proto}//${window.location.hostname}:3001`;
+  })();
 
-const RECONNECT_DELAYS = [500, 1000, 2000, 4000, 8000];
+// Issue 5 fix: Extract hardcoded timing values
+export const RECONNECT_DELAYS = [500, 1000, 2000, 4000, 8000];
+export const CONNECTION_TIMEOUT_MS = 10000;
+export const HEARTBEAT_INTERVAL_MS = 30000;
+export const HEARTBEAT_TIMEOUT_MS = 5000;
 
 export function useMultiplayer() {
   const wsRef = useRef(null);
   const reconnectAttempt = useRef(0);
   const reconnectTimer = useRef(null);
+  const shouldReconnect = useRef(true); // Issue 10 fix
+  const connectTimeoutRef = useRef(null); // Issue 11 fix
+  const heartbeatTimer = useRef(null); // Issue 12 fix
+  const heartbeatFailures = useRef(0);
+  const playerIdRef = useRef(null); // Issue 3 fix
 
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   // disconnected → connecting → connected → in_room
@@ -30,6 +40,37 @@ export function useMultiplayer() {
   const [error, setError] = useState(null);
   const [eventLog, setEventLog] = useState([]);
 
+  // Keep ref in sync with state — Issue 3 fix
+  playerIdRef.current = playerId;
+
+  // ─── Heartbeat (ping/pong) ─────────────────────────────────────
+  const startHeartbeat = useCallback((ws) => {
+    const ping = () => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'ping' }));
+        // If we don't get a pong within HEARTBEAT_TIMEOUT_MS, consider disconnected
+        const pongTimeout = setTimeout(() => {
+          heartbeatFailures.current++;
+          if (heartbeatFailures.current >= 3) {
+            // 3 missed pongs = disconnect
+            ws.close();
+          }
+        }, HEARTBEAT_TIMEOUT_MS);
+
+        // Override onpong to clear the timer
+        // We'll handle this via the onmessage handler
+        ws._pongTimeout = pongTimeout;
+      }
+    };
+    heartbeatTimer.current = setInterval(ping, HEARTBEAT_INTERVAL_MS);
+  }, []);
+
+  const stopHeartbeat = useCallback(() => {
+    clearInterval(heartbeatTimer.current);
+    heartbeatTimer.current = null;
+    heartbeatFailures.current = 0;
+  }, []);
+
   // ─── WebSocket lifecycle ─────────────────────────────────────
 
   const connect = useCallback(() => {
@@ -37,13 +78,27 @@ export function useMultiplayer() {
 
     setConnectionStatus('connecting');
     setError(null);
+    shouldReconnect.current = true; // Issue 10 fix
 
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
 
+    // Issue 11 fix: Connection timeout
+    connectTimeoutRef.current = setTimeout(() => {
+      if (ws.readyState !== WebSocket.OPEN) {
+        ws.close();
+        setConnectionStatus('disconnected');
+        setError('Connection timed out');
+        wsRef.current = null;
+      }
+    }, CONNECTION_TIMEOUT_MS);
+
     ws.onopen = () => {
+      clearTimeout(connectTimeoutRef.current);
       setConnectionStatus('connected');
       reconnectAttempt.current = 0;
+      heartbeatFailures.current = 0;
+      startHeartbeat(ws);
     };
 
     ws.onmessage = (event) => {
@@ -64,16 +119,15 @@ export function useMultiplayer() {
           setEventLog((prev) => [...prev, { text: `Room created: ${msg.roomId}`, ts: Date.now() }]);
           break;
 
-        case 'room_joined':
+      case 'room_joined':
           setRoomId(msg.roomId);
           setPlayers(msg.players);
           setGameState(msg.state);
           setConnectionStatus('in_room');
-          // Determine our player ID from the players list
-          if (!playerId) {
-            // We just joined, so we're player2 unless we're the host
-            const me = msg.players.find((p) => p.id !== 'player1');
-            if (me) setPlayerId(me.id);
+          // Server now provides playerId directly — use it unconditionally
+          if (msg.playerId) {
+            playerIdRef.current = msg.playerId;
+            setPlayerId(msg.playerId);
           }
           setEventLog((prev) => [...prev, { text: 'Opponent joined!', ts: Date.now() }]);
           break;
@@ -96,27 +150,38 @@ export function useMultiplayer() {
           setError(msg.message);
           setEventLog((prev) => [...prev, { text: `Error: ${msg.message}`, ts: Date.now() }]);
           break;
+
+        // Issue 12 fix: Handle pong from server
+        case 'pong':
+          clearTimeout(ws._pongTimeout);
+          heartbeatFailures.current = 0;
+          break;
       }
     };
 
     ws.onclose = () => {
+      clearTimeout(connectTimeoutRef.current);
+      stopHeartbeat();
       setConnectionStatus('disconnected');
       wsRef.current = null;
 
-      // Auto-reconnect with backoff
-      const delay = RECONNECT_DELAYS[Math.min(reconnectAttempt.current, RECONNECT_DELAYS.length - 1)];
-      reconnectAttempt.current++;
-      reconnectTimer.current = setTimeout(connect, delay);
+      // Issue 10 fix: Use shouldReconnect flag instead of magic number
+      if (shouldReconnect.current) {
+        const delay = RECONNECT_DELAYS[Math.min(reconnectAttempt.current, RECONNECT_DELAYS.length - 1)];
+        reconnectAttempt.current++;
+        reconnectTimer.current = setTimeout(connect, delay);
+      }
     };
 
     ws.onerror = () => {
       // onclose will fire after this
     };
-  }, []);
+  }, [startHeartbeat, stopHeartbeat]);
 
   const disconnect = useCallback(() => {
     clearTimeout(reconnectTimer.current);
-    reconnectAttempt.current = 99; // prevent auto-reconnect
+    shouldReconnect.current = false; // Issue 10 fix
+    stopHeartbeat();
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
@@ -127,7 +192,7 @@ export function useMultiplayer() {
     setPlayers([]);
     setGameState(null);
     setEventLog([]);
-  }, []);
+  }, [stopHeartbeat]);
 
   // ─── Room actions ────────────────────────────────────────────
 
@@ -184,11 +249,13 @@ export function useMultiplayer() {
   useEffect(() => {
     return () => {
       clearTimeout(reconnectTimer.current);
+      clearTimeout(connectTimeoutRef.current);
+      stopHeartbeat();
       if (wsRef.current) {
         wsRef.current.close();
       }
     };
-  }, []);
+  }, [stopHeartbeat]);
 
   return {
     // Connection

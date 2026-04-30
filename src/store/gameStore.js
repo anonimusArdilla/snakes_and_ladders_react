@@ -9,6 +9,11 @@ import { rollDice } from '../domain/dice.js';
 import { resolveTurn, nextTurn } from '../domain/rules.js';
 import { BOARD_SIZE } from '../domain/board.js';
 
+// Issue 5 fix: Extract hardcoded timing values to constants
+export const DICE_ANIMATION_MS = 600;
+export const AI_THINK_MIN_MS = 800;
+export const AI_THINK_MAX_MS = 1500;
+
 const INITIAL_STATE = {
   // Board positions (1-based, 0 = not started)
   playerTile: 0,
@@ -58,7 +63,6 @@ export const useGameStore = create((set, get) => ({
 
     // Build animation path: step through each intermediate tile
     const path = [];
-    let tempTile = currentTile;
     for (let i = 1; i <= dice; i++) {
       let next = currentTile + i;
       if (next > BOARD_SIZE) {
@@ -76,7 +80,7 @@ export const useGameStore = create((set, get) => ({
 
     set({ isRolling: true, diceValue: dice });
 
-    // Animate dice for 600ms, then resolve
+    // Issue 5 fix: Use named constant instead of magic number
     setTimeout(() => {
       const updates = {
         isRolling: false,
@@ -110,13 +114,14 @@ export const useGameStore = create((set, get) => ({
       if (updates.currentPlayer === 'ai') {
         get().scheduleAiTurn();
       }
-    }, 600);
+    }, DICE_ANIMATION_MS);
   },
 
   // AI auto-roll with natural delay
   scheduleAiTurn: () => {
     set({ isAiThinking: true });
-    const delay = 800 + Math.random() * 700; // 800–1500ms
+    // Issue 5 fix: Use named constants instead of magic numbers
+    const delay = AI_THINK_MIN_MS + Math.random() * (AI_THINK_MAX_MS - AI_THINK_MIN_MS);
     setTimeout(() => {
       const state = get();
       if (state.gamePhase !== 'playing') return;

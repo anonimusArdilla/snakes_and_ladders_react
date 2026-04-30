@@ -9,7 +9,7 @@ import { createServer } from 'http';
 import express from 'express';
 import { randomUUID } from 'crypto';
 import { rollDice } from '../src/domain/dice.js';
-import { resolveTurn, nextTurn } from '../src/domain/rules.js';
+import { resolveTurn } from '../src/domain/rules.js';
 import { BOARD_SIZE } from '../src/domain/board.js';
 
 // ─── Room Management ─────────────────────────────────────────────
@@ -93,6 +93,13 @@ function getPlayerInfo(room) {
   return room.players.map((p) => ({ id: p.id, name: p.name }));
 }
 
+/**
+ * Multiplayer nextTurn — returns 'player1'/'player2' (not single-player 'player'/'ai').
+ */
+function mpNextTurn(currentPlayer) {
+  return currentPlayer === 'player1' ? 'player2' : 'player1';
+}
+
 // ─── Game Logic (server-authoritative) ───────────────────────────
 
 function handleRollDice(ws, room) {
@@ -129,8 +136,8 @@ function handleRollDice(ws, room) {
     return;
   }
 
-  // Switch turn
-  room.state.currentPlayer = nextTurn(room.state.currentPlayer);
+  // Switch turn — use mpNextTurn, not the single-player nextTurn
+  room.state.currentPlayer = mpNextTurn(room.state.currentPlayer);
 
   sendToRoom(room, {
     type: 'game_state',
@@ -205,13 +212,16 @@ wss.on('connection', (ws) => {
           break;
         }
         currentRoom = result.room;
-        // Notify both players
-        sendToRoom(currentRoom, {
-          type: 'room_joined',
-          roomId: currentRoom.id,
-          state: currentRoom.state,
-          players: getPlayerInfo(currentRoom),
-        });
+        // Notify both players — include playerId so each knows who they are
+        for (const player of currentRoom.players) {
+          send(player.ws, {
+            type: 'room_joined',
+            roomId: currentRoom.id,
+            playerId: player.id,
+            state: currentRoom.state,
+            players: getPlayerInfo(currentRoom),
+          });
+        }
         break;
       }
 
@@ -221,6 +231,11 @@ wss.on('connection', (ws) => {
           break;
         }
         handleRollDice(ws, currentRoom);
+        break;
+      }
+
+      case 'ping': {
+        send(ws, { type: 'pong' });
         break;
       }
 

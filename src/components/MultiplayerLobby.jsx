@@ -13,6 +13,7 @@ export default function MultiplayerLobby({
   disconnect,
   createRoom,
   joinRoom,
+  leaveRoom,
   roomId,
   players,
   shareUrl,
@@ -48,11 +49,21 @@ export default function MultiplayerLobby({
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Fallback: select input
-      const input = document.querySelector('.share-url-input');
-      if (input) {
-        input.select();
-        document.execCommand('copy');
+      // Fallback: use the modern Clipboard API's writeText or prompt the user
+      try {
+        const input = document.querySelector('.share-url-input');
+        if (input) {
+          input.select();
+          // Issue 19 fix: use clipboard API instead of deprecated document.execCommand
+          if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(input.value);
+          } else {
+            // Last resort: alert the user to copy manually
+            alert('Please copy the URL manually: ' + input.value);
+          }
+        }
+      } catch {
+        alert('Unable to copy automatically. Please copy the URL manually.');
       }
     }
   };
