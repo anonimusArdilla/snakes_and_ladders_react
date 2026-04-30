@@ -86,7 +86,23 @@ export default function MultiplayerLobby({
     );
   }
 
-  // ─── Waiting for opponent ────────────────────────────────────
+  // ─── Creating room (waiting for server response) ─────────────
+  if (mode === 'create' && !roomId) {
+    return (
+      <div className="lobby">
+        <div className="lobby-card">
+          <div className="lobby-spinner" />
+          <h3 className="lobby-title">Creating room…</h3>
+          <p className="lobby-sub">Generating a unique room code</p>
+          <button className="btn btn-secondary" onClick={() => { setMode(null); leaveRoom(); }}>
+            ← Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Waiting for opponent (room created, share link visible) ──
   if (roomId && gamePhase === 'waiting') {
     return (
       <div className="lobby">
@@ -173,7 +189,7 @@ export default function MultiplayerLobby({
             </div>
             <button
               className="btn btn-text"
-              onClick={() => { setMode(null); setError(null); }}
+              onClick={() => setMode(null)}
             >
               ← Back
             </button>

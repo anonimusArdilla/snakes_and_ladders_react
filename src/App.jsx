@@ -35,6 +35,16 @@ export default function App() {
     i18n.changeLanguage(language);
   }, [language]);
 
+  // Auto-detect room code from URL on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlRoom = params.get('room');
+    if (urlRoom && gameMode === null) {
+      setGameMode('multi');
+      mp.connect();
+    }
+  }, []); // Run once on mount
+
   // Auto-enter game when multiplayer game starts
   useEffect(() => {
     if (mp.gamePhase === 'playing' && gameMode !== 'multi') {
@@ -56,8 +66,8 @@ export default function App() {
   // ─── Determine what to render ──────────────────────────────
 
   const renderContent = () => {
-    // Multiplayer game in progress
-    if (gameMode === 'multi' && mp.gameState) {
+    // Multiplayer game in progress (only when actually playing or finished)
+    if (gameMode === 'multi' && mp.gameState && (mp.gamePhase === 'playing' || mp.gamePhase === 'finished')) {
       if (mp.gamePhase === 'finished') {
         return (
           <>
