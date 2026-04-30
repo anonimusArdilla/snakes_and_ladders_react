@@ -4,6 +4,7 @@
  * Renders the game board with numbered tiles,
  * snake/ladder indicators, and player tokens.
  * Supports both single-player (from store) and multiplayer (from props).
+ * Shows colored arrows — red for snakes, green for ladders.
  */
 import React, { memo, useMemo } from 'react';
 import { BOARD_SIZE, SNAKES, LADDERS, getTilePosition } from '../domain/board.js';
@@ -47,13 +48,6 @@ const Tile = memo(function Tile({ tile, playerTile, aiTile, gamePhase }) {
     <div
       className={`tile ${hasSnake ? 'tile-snake' : ''} ${hasLadder ? 'tile-ladder' : ''}`}
       style={{ backgroundColor: getTileColor(tile) }}
-      title={
-        hasSnake
-          ? `Snake: ${tile} → ${SNAKES[tile]}`
-          : hasLadder
-            ? `Ladder: ${tile} → ${LADDERS[tile]}`
-            : `Tile ${tile}`
-      }
     >
       <span className="tile-number">{tile}</span>
 
@@ -76,6 +70,103 @@ const Tile = memo(function Tile({ tile, playerTile, aiTile, gamePhase }) {
   );
 });
 
+/**
+ * Renders colored curved arrows over the board to show snake and ladder connections.
+ * Red curved arrows for snakes (sliding down), green curved arrows for ladders (climbing up).
+ * Uses SVG cubic bezier paths positioned over the grid.
+ */
+const BoardArrows = memo(function BoardArrows() {
+  const arrows = useMemo(() => {
+    const result = [];
+
+    // Snakes — red curved arrows from head tile to tail tile
+    for (const [from, to] of Object.entries(SNAKES)) {
+      const fromPos = getTilePosition(parseInt(from));
+      const toPos = getTilePosition(to);
+      // Percentage coordinates (0–100) for viewBox
+      const x1 = fromPos.col * 10 + 5;
+      const y1 = fromPos.row * 10 + 5;
+      const x2 = toPos.col * 10 + 5;
+      const y2 = toPos.row * 10 + 5;
+      // Control point offset for a smooth organic curve
+      const midX = (x1 + x2) / 2;
+      const midY = (y1 + y2) / 2;
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      // Perpendicular offset for the control point — creates a smooth arc
+      const perpDist = Math.max(Math.abs(dx), Math.abs(dy)) * 0.4;
+      const cx = midX - dy * (perpDist / Math.sqrt(dx * dx + dy * dy || 1));
+      const cy = midY + dx * (perpDist / Math.sqrt(dx * dx + dy * dy || 1));
+      const d = `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`;
+      result.push({ d, type: 'snake' });
+    }
+
+    // Ladders — green curved arrows from bottom tile to top tile
+    for (const [from, to] of Object.entries(LADDERS)) {
+      const fromPos = getTilePosition(parseInt(from));
+      const toPos = getTilePosition(to);
+      const x1 = fromPos.col * 10 + 5;
+      const y1 = fromPos.row * 10 + 5;
+      const x2 = toPos.col * 10 + 5;
+      const y2 = toPos.row * 10 + 5;
+      // Control point offset for a smooth organic curve
+      const midX = (x1 + x2) / 2;
+      const midY = (y1 + y2) / 2;
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      // Perpendicular offset for the control point — creates a smooth arc
+      const perpDist = Math.max(Math.abs(dx), Math.abs(dy)) * 0.4;
+      const cx = midX + dy * (perpDist / Math.sqrt(dx * dx + dy * dy || 1));
+      const cy = midY - dx * (perpDist / Math.sqrt(dx * dx + dy * dy || 1));
+      const d = `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`;
+      result.push({ d, type: 'ladder' });
+    }
+
+    return result;
+  }, []);
+
+  return (
+    <svg className="board-svg-overlay" viewBox="0 0 100 100" aria-hidden="true">
+      <defs>
+        <marker
+          id="board-arrow-snake"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="6"
+          markerHeight="6"
+          orient="auto"
+        >
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--tile-snake)" />
+        </marker>
+        <marker
+          id="board-arrow-ladder"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="6"
+          markerHeight="6"
+          orient="auto"
+        >
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--tile-ladder)" />
+        </marker>
+      </defs>
+      {arrows.map((a, i) => (
+        <path
+          key={i}
+          d={a.d}
+          fill="none"
+          stroke={a.type === 'snake' ? 'var(--tile-snake)' : 'var(--tile-ladder)'}
+          strokeWidth="0.6"
+          markerEnd={a.type === 'snake' ? 'url(#board-arrow-snake)' : 'url(#board-arrow-ladder)'}
+          opacity="0.8"
+          strokeLinecap="round"
+        />
+      ))}
+    </svg>
+  );
+});
+
 const Board = memo(function Board({ playerTile: propPlayerTile, aiTile: propAiTile, gamePhase: propGamePhase } = {}) {
   const storePlayerTile = useGameStore((s) => s.playerTile);
   const storeAiTile = useGameStore((s) => s.aiTile);
@@ -91,6 +182,7 @@ const Board = memo(function Board({ playerTile: propPlayerTile, aiTile: propAiTi
   return (
     <div className="board-container">
       <div className="board">
+        <BoardArrows />
         {boardTiles.map((row, rowIdx) => (
           <div key={rowIdx} className="board-row">
             {row.map((tile) => (
