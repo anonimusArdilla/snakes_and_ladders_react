@@ -1,7 +1,7 @@
 /**
  * Settings Panel
  *
- * Theme, language, and sound controls.
+ * Theme, language, sound, and manual mode controls.
  */
 import React from 'react';
 import { useTranslation } from 'react-i18next';
@@ -19,6 +19,8 @@ export default function Settings({ onClose }) {
   const setTheme = useSettingsStore((s) => s.setTheme);
   const soundEnabled = useSettingsStore((s) => s.soundEnabled);
   const toggleSound = useSettingsStore((s) => s.toggleSound);
+  const manualMode = useSettingsStore((s) => s.manualMode);
+  const toggleManualMode = useSettingsStore((s) => s.toggleManualMode);
   const setLanguage = useSettingsStore((s) => s.setLanguage);
 
   const handleLanguageChange = (code) => {
@@ -83,6 +85,26 @@ export default function Settings({ onClose }) {
               🔇 {t('settings.sound.off')}
             </button>
           </div>
+        </div>
+
+        {/* Manual Mode */}
+        <div className="settings-group">
+          <label className="settings-label">{t('settings.manualMode')}</label>
+          <div className="settings-toggle-group">
+            <button
+              className={`btn-toggle ${!manualMode ? 'active' : ''}`}
+              onClick={() => manualMode && toggleManualMode()}
+            >
+              🤖 {t('settings.manualMode.auto')}
+            </button>
+            <button
+              className={`btn-toggle ${manualMode ? 'active' : ''}`}
+              onClick={() => !manualMode && toggleManualMode()}
+            >
+              🖱️ {t('settings.manualMode.manual')}
+            </button>
+          </div>
+          <p className="settings-hint">{t('settings.manualMode.hint')}</p>
         </div>
 
         <button className="btn btn-secondary btn-close-settings" onClick={onClose}>

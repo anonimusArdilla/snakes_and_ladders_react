@@ -42,6 +42,7 @@ html {
   --dice-dot: #1a1a2e;
   --dice-border: #e0dcd4;
 
+  --tile-valid-move: #a29bfe;
   --token-player: #0984e3;
   --token-ai: #d63031;
 
@@ -431,6 +432,114 @@ html {
 @keyframes slideIn {
   from { opacity: 0; transform: translateY(-8px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* === Manual Mode Styles === */
+.manual-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #f39c12, #e74c3c);
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  animation: pulse 1.5s infinite;
+}
+
+.manual-hint {
+  font-size: 0.8rem;
+  color: var(--accent);
+  font-weight: 600;
+  text-align: center;
+  padding: 0.3rem 0;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.manual-mistakes {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--tile-snake);
+  font-weight: 700;
+}
+
+.manual-mistake-count {
+  font-size: 1rem;
+}
+
+/* Valid move tile highlighting */
+.tile-valid-move {
+  background-color: var(--tile-valid-move) !important;
+  border-color: var(--accent) !important;
+  transition: background-color 0.2s;
+}
+
+/* Clickable/highlighted tiles in manual mode */
+.tile-clickable {
+  cursor: pointer;
+  border: 2px solid var(--accent) !important;
+  box-shadow: 0 0 8px var(--accent-glow);
+  animation: tilePulse 1.2s ease-in-out infinite;
+}
+
+.tile-clickable:hover {
+  transform: scale(1.08);
+  box-shadow: 0 0 16px var(--accent-glow);
+  z-index: 5;
+}
+
+.tile-clickable-wrong {
+  cursor: pointer;
+  border: 2px solid var(--tile-snake) !important;
+  box-shadow: 0 0 8px rgba(231, 76, 60, 0.3);
+}
+
+.tile-clickable-wrong:hover {
+  transform: scale(1.08);
+  box-shadow: 0 0 16px rgba(231, 76, 60, 0.5);
+  z-index: 5;
+}
+
+@keyframes tilePulse {
+  0%, 100% { box-shadow: 0 0 8px var(--accent-glow); }
+  50% { box-shadow: 0 0 16px var(--accent-glow); }
+}
+
+/* Penalty animation */
+.penalty-flash {
+  animation: penaltyFlash 0.6s ease-out;
+}
+
+@keyframes penaltyFlash {
+  0% { background-color: rgba(231, 76, 60, 0.5); }
+  100% { background-color: transparent; }
+}
+
+/* Penalty display in status */
+.penalty-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  background: rgba(231, 76, 60, 0.15);
+  color: var(--tile-snake);
+  animation: slideIn 0.3s ease-out;
+}
+
+.settings-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.4rem;
+  font-weight: 500;
+  line-height: 1.4;
 }
 
 /* === Dice === */
@@ -1047,6 +1156,69 @@ html {
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
+}
+
+/* Room info display in multiplayer status */
+.mp-room-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+}
+
+.mp-room-id {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.mp-room-code {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: 0.06em;
+  font-size: 0.85rem;
+  background: var(--bg-secondary);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+}
+
+.mp-share-url-box {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.mp-share-url-input {
+  flex: 1;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.7rem;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  outline: none;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.mp-share-url-input:focus {
+  border-color: var(--accent);
+}
+
+/* Extra small button variant */
+.btn-xs {
+  padding: 0.2rem 0.4rem;
+  font-size: 0.7rem;
+  border-radius: 6px;
+  line-height: 1;
 }
 
 .mp-turn {

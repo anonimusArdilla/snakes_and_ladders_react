@@ -18,11 +18,13 @@ export default function MultiplayerStatus({
   winner,
   gamePhase,
   shareUrl,
+  roomId,
   eventLog,
   onLeave,
 }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
+  const [copiedRoom, setCopiedRoom] = useState(false);
 
   if (!gameState || gamePhase === 'waiting') return null;
 
@@ -51,8 +53,42 @@ export default function MultiplayerStatus({
     else if (lastEvent.type === 'bounce') eventText = `↩️ Bounced back → tile ${lastEvent.tile}`;
   }
 
+  const handleCopyRoomId = async () => {
+    if (!roomId) return;
+    try {
+      await navigator.clipboard.writeText(roomId.toUpperCase());
+      setCopiedRoom(true);
+      setTimeout(() => setCopiedRoom(false), 2000);
+    } catch {}
+  };
+
   return (
     <div className="mp-status">
+      {/* Room info — always visible during gameplay */}
+      {roomId && (
+        <div className="mp-room-info">
+          <div className="mp-room-id">
+            🏠 Room: <code className="mp-room-code">{roomId}</code>
+            <button className="btn btn-text btn-xs" onClick={handleCopyRoomId}>
+              {copiedRoom ? '✓' : '📋'}
+            </button>
+          </div>
+          {shareUrl && (
+            <div className="mp-share-url-box">
+              <input
+                className="mp-share-url-input"
+                value={shareUrl}
+                readOnly
+                onClick={(e) => e.target.select()}
+              />
+              <button className="btn btn-primary btn-xs" onClick={handleCopyLink}>
+                {copied ? '✓' : '📋 Copy'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Turn indicator */}
       <div className={`mp-turn ${isMyTurn ? 'mp-turn-mine' : 'mp-turn-opp'}`}>
         <span className="mp-turn-dot" />

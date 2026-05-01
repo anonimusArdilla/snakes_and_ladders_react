@@ -3,10 +3,12 @@
  *
  * Animated dice with face display and roll button.
  * Supports both single-player (from store) and multiplayer (from props).
+ * Supports manual mode (user must move piece after rolling).
  */
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useGameStore } from '../store/gameStore.js';
+import { useSettingsStore } from '../store/settingsStore.js';
 
 const DICE_FACES = {
   1: [[1, 1]],
@@ -44,10 +46,14 @@ export default function Dice({
   canRoll: mpCanRoll,
   isMultiplayer,
   isAiThinking: mpAiThinking,
+  manualMode,
+  manualAwaitingSelection,
+  manualMistakeCount,
+  manualLastPenalty,
 } = {}) {
   const { t } = useTranslation();
 
-  // Single-player store values
+  // Game store values (single-player normal + manual mode)
   const spDiceValue = useGameStore((s) => s.diceValue);
   const spIsRolling = useGameStore((s) => s.isRolling);
   const spIsAiThinking = useGameStore((s) => s.isAiThinking);
@@ -55,13 +61,25 @@ export default function Dice({
   const spGamePhase = useGameStore((s) => s.gamePhase);
   const spRollDice = useGameStore((s) => s.rollDice);
 
-  // Use multiplayer props or single-player store
+  // Manual mode from settings + game store
+  const isManualMode = manualMode || useSettingsStore((s) => s.manualMode);
+  const storeManualAwaiting = useGameStore((s) => s.manualAwaitingSelection);
+  const storeManualMistakes = useGameStore((s) => s.manualMistakeCount);
+  const storeManualPenalty = useGameStore((s) => s.manualLastPenalty);
+
+  // Determine effective values
+  const effectiveAwaiting = manualAwaitingSelection !== undefined ? manualAwaitingSelection : storeManualAwaiting;
+  const effectiveMistakes = manualMistakeCount !== undefined ? manualMistakeCount : storeManualMistakes;
+  const effectivePenalty = manualLastPenalty !== undefined ? manualLastPenalty : storeManualPenalty;
+
   const diceValue = isMultiplayer ? mpDiceValue : spDiceValue;
   const isRolling = isMultiplayer ? mpRolling : spIsRolling;
   const isAiThinking = isMultiplayer ? mpAiThinking : spIsAiThinking;
+
   const canRoll = isMultiplayer
     ? mpCanRoll
-    : spGamePhase === 'playing' && spCurrentPlayer === 'player' && !spIsRolling && !spIsAiThinking;
+    : spGamePhase === 'playing' && spCurrentPlayer === 'player' && !spIsRolling && !spIsAiThinking && !storeManualAwaiting;
+
   const handleRoll = isMultiplayer ? mpOnRoll : spRollDice;
 
   return (
@@ -75,14 +93,35 @@ export default function Dice({
         onClick={handleRoll}
         disabled={!canRoll}
       >
-        {isRolling
-          ? t('game.rolling')
-          : isAiThinking
-            ? t('game.turn.ai')
-            : isMultiplayer
-              ? (canRoll ? '🎲 ' + t('action.roll') : "⏳ Opponent's turn")
-              : t('action.roll')}
+        {isManualMode && effectiveAwaiting
+          ? t('manual.selectTile')
+          : isRolling
+            ? t('game.rolling')
+            : isAiThinking
+              ? t('game.turn.ai')
+              : isManualMode
+                ? (canRoll ? '🎯 ' + t('action.roll') : t('manual.moveNow'))
+                : isMultiplayer
+                  ? (canRoll ? '🎲 ' + t('action.roll') : "⏳ Opponent's turn")
+                  : t('action.roll')}
       </button>
+
+      {/* Show penalty warning in manual mode */}
+      {isManualMode && effectivePenalty && (
+        <div className="dice-penalty-banner">
+          <span className="penalty-icon">⚠️</span>
+          <span className="penalty-text">
+            {t(effectivePenalty.description)}
+          </span>
+        </div>
+      )}
+
+      {/* Show mistake count */}
+      {isManualMode && effectiveMistakes > 0 && (
+        <div className="dice-mistake-counter">
+          {t('manual.mistakes')}: {effectiveMistakes}
+        </div>
+      )}
     </div>
   );
 }

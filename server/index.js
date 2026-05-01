@@ -11,15 +11,17 @@ import { randomUUID } from 'crypto';
 import { rollDice } from '../src/domain/dice.js';
 import { resolveTurn } from '../src/domain/rules.js';
 import { BOARD_SIZE } from '../src/domain/board.js';
+import { calculateValidMoves, validateMove, getPenalty, PENALTIES } from '../src/domain/manualMode.js';
 
 // ─── Room Management ─────────────────────────────────────────────
 
 const rooms = new Map();
 
-function createRoom(hostWs) {
+function createRoom(hostWs, manualMode = false) {
   const roomId = randomUUID().slice(0, 8); // Short, URL-friendly ID
   const room = {
     id: roomId,
+    manualMode,
     players: [{ ws: hostWs, id: 'player1', name: 'Player 1' }],
     state: {
       player1Tile: 0,
@@ -30,6 +32,10 @@ function createRoom(hostWs) {
       lastEvent: null,
       diceValue: null,
       turnCount: 0,
+      manualDiceValue: null,
+      manualValidMoves: [],
+      manualMistakeCount: 0,
+      manualLastPenalty: null,
     },
     createdAt: Date.now(),
   };
@@ -145,6 +151,118 @@ function handleRollDice(ws, room) {
   });
 }
 
+function handleManualRollDice(ws, room) {
+  const player = room.players.find((p) => p.ws === ws);
+  if (!player) return;
+  if (room.state.currentPlayer !== player.id) return;
+  if (room.state.gamePhase !== 'playing') return;
+
+  const dice = rollDice();
+  const tileKey = `${player.id}Tile`;
+  const currentTile = room.state[tileKey];
+
+  const validMoves = calculateValidMoves(currentTile, dice);
+
+  room.state.diceValue = dice;
+  room.state.manualDiceValue = dice;
+  room.state.manualValidMoves = validMoves;
+  room.state.manualMistakeCount = 0;
+  room.state.manualLastPenalty = null;
+
+  sendToRoom(room, {
+    type: 'game_state',
+    state: room.state,
+  });
+}
+
+function handleSelectTile(ws, room, selectedTile) {
+  const player = room.players.find((p) => p.ws === ws);
+  if (!player) return;
+  if (room.state.currentPlayer !== player.id) return;
+  if (room.state.gamePhase !== 'playing') return;
+  if (room.state.manualDiceValue === null) return;
+
+  const tileKey = `${player.id}Tile`;
+  const currentTile = room.state[tileKey];
+  const dice = room.state.manualDiceValue;
+
+  const moveResult = validateMove(selectedTile, currentTile, dice);
+  if (!moveResult.valid) {
+    // Invalid move — apply penalty
+    const mistakeCount = room.state.manualMistakeCount + 1;
+    const penalty = getPenalty(mistakeCount);
+    const penaltyType = penalty.type;
+    room.state.manualMistakeCount = mistakeCount;
+    room.state.manualLastPenalty = penaltyType;
+
+    if (penaltyType === PENALTIES.LOSE_TURN) {
+      // Lose turn — clear manual state and switch to opponent
+      room.state.manualDiceValue = null;
+      room.state.manualValidMoves = [];
+      room.state.currentPlayer = mpNextTurn(room.state.currentPlayer);
+    } else if (penaltyType === PENALTIES.MOVE_BACK_3 || penaltyType === PENALTIES.MOVE_BACK_5) {
+      // Move back — apply to current player's tile
+      const moveBackAmount = penaltyType === PENALTIES.MOVE_BACK_3 ? 3 : 5;
+      room.state[tileKey] = Math.max(1, currentTile - moveBackAmount);
+      room.state.manualDiceValue = null;
+      room.state.manualValidMoves = [];
+      room.state.currentPlayer = mpNextTurn(room.state.currentPlayer);
+    } else if (penaltyType === PENALTIES.SKIP_NEXT_ROLL) {
+      // Warning — player gets to try again (clear dice, keep tile same, same player's turn)
+      room.state.manualDiceValue = null;
+      room.state.manualValidMoves = [];
+      // Don't switch turns — player re-rolls (penalty is they lose this roll)
+    }
+    // For other penalties like OPPONENT_FREE_ROLL, just clear manual state
+    // player gets to try again with a fresh roll
+
+    sendToRoom(room, {
+      type: 'game_state',
+      state: room.state,
+    });
+    return;
+  }
+
+  // Valid move — resolve the turn
+  const result = resolveTurn(currentTile, dice);
+
+  // Resolved final tile accounts for snakes/ladders at the destination
+  const interaction = result.interaction;
+  const finalTile = result.finalTile;
+
+  room.state[tileKey] = finalTile;
+  room.state.lastEvent = interaction
+    ? { type: interaction.type, tile: finalTile }
+    : { type: 'normal', tile: finalTile };
+  room.state.turnCount++;
+
+  // Clear manual state
+  room.state.manualDiceValue = null;
+  room.state.manualValidMoves = [];
+  room.state.manualMistakeCount = 0;
+  room.state.manualLastPenalty = null;
+
+  // Check win
+  if (finalTile >= BOARD_SIZE) {
+    room.state.gamePhase = 'finished';
+    room.state.winner = player.id;
+    sendToRoom(room, {
+      type: 'game_over',
+      state: room.state,
+      winner: player.id,
+    });
+    return;
+  }
+
+  // Switch turn
+  room.state.currentPlayer = mpNextTurn(room.state.currentPlayer);
+
+  sendToRoom(room, {
+    type: 'game_state',
+    state: room.state,
+  });
+}
+
 // ─── Cleanup stale rooms every 5 min ─────────────────────────────
 
 setInterval(() => {
@@ -193,12 +311,13 @@ wss.on('connection', (ws) => {
 
     switch (msg.type) {
       case 'create_room': {
-        const room = createRoom(ws);
+        const room = createRoom(ws, msg.manualMode === true);
         currentRoom = room;
         send(ws, {
           type: 'room_created',
           roomId: room.id,
           playerId: 'player1',
+          manualMode: room.manualMode,
           state: room.state,
           players: getPlayerInfo(room),
         });
@@ -218,6 +337,7 @@ wss.on('connection', (ws) => {
             type: 'room_joined',
             roomId: currentRoom.id,
             playerId: player.id,
+            manualMode: currentRoom.manualMode,
             state: currentRoom.state,
             players: getPlayerInfo(currentRoom),
           });
@@ -230,7 +350,24 @@ wss.on('connection', (ws) => {
           send(ws, { type: 'error', message: 'Not in a room' });
           break;
         }
-        handleRollDice(ws, currentRoom);
+        if (currentRoom.manualMode) {
+          handleManualRollDice(ws, currentRoom);
+        } else {
+          handleRollDice(ws, currentRoom);
+        }
+        break;
+      }
+
+      case 'select_tile': {
+        if (!currentRoom) {
+          send(ws, { type: 'error', message: 'Not in a room' });
+          break;
+        }
+        if (!currentRoom.manualMode) {
+          send(ws, { type: 'error', message: 'Not in manual mode' });
+          break;
+        }
+        handleSelectTile(ws, currentRoom, msg.selectedTile);
         break;
       }
 

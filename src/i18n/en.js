@@ -1,5 +1,5 @@
 /**
- * i18n — English translations (updated with multiplayer)
+ * i18n — English translations (updated with multiplayer + manual mode)
  */
 export default {
   // Game
@@ -43,6 +43,25 @@ export default {
   'settings.sound': 'Sound',
   'settings.sound.on': 'On',
   'settings.sound.off': 'Off',
+  'settings.manualMode': 'Movement Mode',
+  'settings.manualMode.auto': 'Auto',
+  'settings.manualMode.manual': 'Manual',
+  'settings.manualMode.hint': 'Manual mode: click valid tiles to move your piece.',
+
+  // Manual Mode
+  'manual.mode': 'Manual Mode',
+  'manual.selectTile': 'Click a tile on the board!',
+  'manual.selectTileHint': 'Click a highlighted tile to move',
+  'manual.moveNow': 'Select a valid tile',
+  'manual.mistakes': 'Mistakes',
+
+  // Penalties
+  'penalty.goBackThree': 'Go back 3 tiles!',
+  'penalty.goBackFive': 'Go back 5 tiles!',
+  'penalty.loseTurn': 'Lose your turn!',
+  'penalty.skipNextRoll': 'Next roll skipped!',
+  'penalty.goBackStart': 'Go back to start!',
+  'penalty.goBackTen': 'Go back 10 tiles!',
 
   // Multiplayer
   'mp.title': 'Online Multiplayer',

@@ -1,5 +1,5 @@
 /**
- * i18n — Simplified Chinese translations (updated with multiplayer)
+ * i18n — Simplified Chinese translations (updated with multiplayer + manual mode)
  */
 export default {
   'game.title': '蛇棋',
@@ -37,6 +37,25 @@ export default {
   'settings.sound': '音效',
   'settings.sound.on': '开启',
   'settings.sound.off': '关闭',
+  'settings.manualMode': '移动模式',
+  'settings.manualMode.auto': '自动',
+  'settings.manualMode.manual': '手动',
+  'settings.manualMode.hint': '手动模式：点击有效格子移动你的棋子。',
+
+  // Manual Mode
+  'manual.mode': '手动模式',
+  'manual.selectTile': '请点击棋盘上的格子！',
+  'manual.selectTileHint': '点击高亮的格子进行移动',
+  'manual.moveNow': '选择一个有效格子',
+  'manual.mistakes': '失误次数',
+
+  // Penalties
+  'penalty.goBackThree': '后退 3 格！',
+  'penalty.goBackFive': '后退 5 格！',
+  'penalty.loseTurn': '跳过本回合！',
+  'penalty.skipNextRoll': '跳过下一次掷骰！',
+  'penalty.goBackStart': '回到起点！',
+  'penalty.goBackTen': '后退 10 格！',
 
   'mp.title': '在线多人对战',
   'mp.create': '创建房间',

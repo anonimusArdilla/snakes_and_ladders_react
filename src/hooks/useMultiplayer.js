@@ -20,7 +20,7 @@ export const CONNECTION_TIMEOUT_MS = 10000;
 export const HEARTBEAT_INTERVAL_MS = 30000;
 export const HEARTBEAT_TIMEOUT_MS = 5000;
 
-export function useMultiplayer() {
+export function useMultiplayer(manualModeEnabled = false) {
   const wsRef = useRef(null);
   const reconnectAttempt = useRef(0);
   const reconnectTimer = useRef(null);
@@ -39,6 +39,7 @@ export function useMultiplayer() {
   const [gameState, setGameState] = useState(null);
   const [error, setError] = useState(null);
   const [eventLog, setEventLog] = useState([]);
+  const [roomManualMode, setRoomManualMode] = useState(false);
 
   // Keep ref in sync with state — Issue 3 fix
   playerIdRef.current = playerId;
@@ -116,6 +117,9 @@ export function useMultiplayer() {
           setPlayers(msg.players);
           setGameState(msg.state);
           setConnectionStatus('in_room');
+          if (msg.manualMode !== undefined) {
+            setRoomManualMode(msg.manualMode === true);
+          }
           setEventLog((prev) => [...prev, { text: `Room created: ${msg.roomId}`, ts: Date.now() }]);
           break;
 
@@ -128,6 +132,9 @@ export function useMultiplayer() {
           if (msg.playerId) {
             playerIdRef.current = msg.playerId;
             setPlayerId(msg.playerId);
+          }
+          if (msg.manualMode !== undefined) {
+            setRoomManualMode(msg.manualMode === true);
           }
           setEventLog((prev) => [...prev, { text: 'Opponent joined!', ts: Date.now() }]);
           break;
@@ -192,15 +199,16 @@ export function useMultiplayer() {
     setPlayers([]);
     setGameState(null);
     setEventLog([]);
+    setRoomManualMode(false);
   }, [stopHeartbeat]);
 
   // ─── Room actions ────────────────────────────────────────────
 
   const createRoom = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'create_room' }));
+      wsRef.current.send(JSON.stringify({ type: 'create_room', manualMode: manualModeEnabled }));
     }
-  }, []);
+  }, [manualModeEnabled]);
 
   const joinRoom = useCallback((id) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -229,6 +237,12 @@ export function useMultiplayer() {
     }
   }, []);
 
+  const selectTile = useCallback((tile) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'select_tile', selectedTile: tile }));
+    }
+  }, []);
+
   // ─── Derived state ───────────────────────────────────────────
 
   const isMyTurn = gameState?.currentPlayer === playerId;
@@ -238,6 +252,12 @@ export function useMultiplayer() {
   const opponentTile = amIPlayer1 ? gameState?.player2Tile : gameState?.player1Tile;
   const winner = gameState?.winner;
   const gamePhase = gameState?.gamePhase;
+
+  // Manual mode derived state
+  const manualDiceValue = gameState?.manualDiceValue ?? null;
+  const manualAvailableMoves = gameState?.manualValidMoves ?? [];
+  const manualMistakeCount = gameState?.manualMistakeCount ?? 0;
+  const manualLastPenalty = gameState?.manualLastPenalty ?? null;
 
   // Shareable link
   const shareUrl = roomId
@@ -275,11 +295,19 @@ export function useMultiplayer() {
     // Game
     gameState,
     rollDice,
+    selectTile,
     isMyTurn,
     myTile,
     opponentTile,
     winner,
     gamePhase,
+
+    // Manual mode — use room's setting when in a room, otherwise local setting
+    manualDiceValue,
+    manualAvailableMoves,
+    manualMistakeCount,
+    manualLastPenalty,
+    manualMode: connectionStatus === 'in_room' ? roomManualMode : manualModeEnabled,
 
     // UI
     error,

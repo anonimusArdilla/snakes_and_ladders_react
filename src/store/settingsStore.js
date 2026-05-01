@@ -24,6 +24,7 @@ const defaults = {
   theme: 'dark',
   language: 'en',
   soundEnabled: true,
+  manualMode: false, // Manual movement mode (off by default)
 };
 
 const saved = loadSettings();
@@ -46,5 +47,11 @@ export const useSettingsStore = create((set, get) => ({
     const next = !get().soundEnabled;
     set({ soundEnabled: next });
     saveSettings({ ...get(), soundEnabled: next });
+  },
+
+  toggleManualMode: () => {
+    const next = !get().manualMode;
+    set({ manualMode: next });
+    saveSettings({ ...get(), manualMode: next });
   },
 }));

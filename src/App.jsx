@@ -1,7 +1,5 @@
 /**
- * App Component — Updated for Multiplayer
- *
- * Orchestrates single-player and multiplayer game flows.
+ * App Component — Orchestrates single-player and multiplayer game flows.
  */
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -23,12 +21,29 @@ export default function App() {
   const { i18n } = useTranslation();
   const theme = useSettingsStore((s) => s.theme);
   const language = useSettingsStore((s) => s.language);
+  const manualMode = useSettingsStore((s) => s.manualMode);
+
   const gamePhase = useGameStore((s) => s.gamePhase);
+  const playerTile = useGameStore((s) => s.playerTile);
+  const aiTile = useGameStore((s) => s.aiTile);
+  const currentPlayer = useGameStore((s) => s.currentPlayer);
+  const diceValue = useGameStore((s) => s.diceValue);
+  const isRolling = useGameStore((s) => s.isRolling);
+  const isAiThinking = useGameStore((s) => s.isAiThinking);
+  const lastEvent = useGameStore((s) => s.lastEvent);
+  const manualAwaitingSelection = useGameStore((s) => s.manualAwaitingSelection);
+  const manualAvailableMoves = useGameStore((s) => s.manualAvailableMoves);
+  const manualMistakeCount = useGameStore((s) => s.manualMistakeCount);
+  const manualLastPenalty = useGameStore((s) => s.manualLastPenalty);
   const startGame = useGameStore((s) => s.startGame);
+  const rollDice = useGameStore((s) => s.rollDice);
+  const movePlayerToTile = useGameStore((s) => s.movePlayerToTile);
+  const resetGame = useGameStore((s) => s.resetGame);
+
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [gameMode, setGameMode] = useState(null); // null | 'single' | 'multi'
 
-  const mp = useMultiplayer();
+  const mp = useMultiplayer(manualMode);
 
   // Sync language on mount
   useEffect(() => {
@@ -43,7 +58,7 @@ export default function App() {
       setGameMode('multi');
       mp.connect();
     }
-  }, []); // Run once on mount
+  }, []);
 
   // Auto-enter game when multiplayer game starts
   useEffect(() => {
@@ -63,10 +78,13 @@ export default function App() {
     startGame();
   };
 
+  // Can the human player roll the dice?
+  const canRoll = !isRolling && !isAiThinking && gamePhase === 'playing' && currentPlayer === 'player';
+
   // ─── Determine what to render ──────────────────────────────
 
   const renderContent = () => {
-    // Multiplayer game in progress (only when actually playing or finished)
+    // Multiplayer game in progress
     if (gameMode === 'multi' && mp.gameState && (mp.gamePhase === 'playing' || mp.gamePhase === 'finished')) {
       if (mp.gamePhase === 'finished') {
         return (
@@ -83,6 +101,7 @@ export default function App() {
                   winner={mp.winner}
                   gamePhase={mp.gamePhase}
                   shareUrl={mp.shareUrl}
+                  roomId={mp.roomId}
                   eventLog={mp.eventLog}
                   onLeave={handleLeaveMultiplayer}
                 />
@@ -118,6 +137,7 @@ export default function App() {
               winner={mp.winner}
               gamePhase={mp.gamePhase}
               shareUrl={mp.shareUrl}
+              roomId={mp.roomId}
               eventLog={mp.eventLog}
               onLeave={handleLeaveMultiplayer}
             />
@@ -125,9 +145,13 @@ export default function App() {
               isRolling={false}
               diceValue={mp.gameState.diceValue}
               onRoll={mp.rollDice}
-              canRoll={mp.isMyTurn && mp.gamePhase === 'playing'}
+              canRoll={mp.isMyTurn && mp.gamePhase === 'playing' && mp.manualDiceValue === null}
               isMultiplayer
               isAiThinking={!mp.isMyTurn}
+              manualMode={mp.manualMode}
+              manualAwaitingSelection={mp.manualMode && mp.manualDiceValue !== null}
+              manualMistakeCount={mp.manualMistakeCount}
+              manualLastPenalty={mp.manualLastPenalty}
             />
           </div>
           <div className="game-board">
@@ -135,6 +159,10 @@ export default function App() {
               playerTile={mp.amIPlayer1 ? mp.gameState.player1Tile : mp.gameState.player2Tile}
               aiTile={mp.amIPlayer1 ? mp.gameState.player2Tile : mp.gameState.player1Tile}
               gamePhase={mp.gamePhase}
+              manualMode={mp.manualMode}
+              manualAwaitingSelection={mp.manualMode && mp.manualDiceValue !== null}
+              manualAvailableMoves={mp.manualAvailableMoves}
+              onTileClick={mp.manualMode && mp.manualDiceValue !== null ? mp.selectTile : undefined}
             />
           </div>
         </div>
@@ -150,6 +178,7 @@ export default function App() {
           disconnect={mp.disconnect}
           createRoom={mp.createRoom}
           joinRoom={mp.joinRoom}
+          leaveRoom={mp.leaveRoom}
           roomId={mp.roomId}
           players={mp.players}
           shareUrl={mp.shareUrl}
@@ -159,16 +188,31 @@ export default function App() {
       );
     }
 
-    // Single-player game
+    // Single-player game (normal or manual mode — both use gameStore)
     if (gameMode === 'single' && gamePhase !== 'idle') {
       return (
         <div className="game-layout">
           <div className="game-sidebar">
-            <GameStatus />
-            <Dice />
+            <GameStatus
+              manualMode={manualMode}
+              manualAwaitingSelection={manualAwaitingSelection}
+              manualMistakeCount={manualMistakeCount}
+              manualLastPenalty={manualLastPenalty}
+            />
+            <Dice
+              manualMode={manualMode}
+              manualAwaitingSelection={manualAwaitingSelection}
+              manualMistakeCount={manualMistakeCount}
+              manualLastPenalty={manualLastPenalty}
+            />
           </div>
           <div className="game-board">
-            <Board />
+            <Board
+              manualMode={manualMode}
+              manualAwaitingSelection={manualAwaitingSelection}
+              manualAvailableMoves={manualAvailableMoves}
+              onTileClick={manualMode ? movePlayerToTile : undefined}
+            />
           </div>
         </div>
       );
@@ -192,13 +236,12 @@ export default function App() {
         <Header
           onSettingsClick={() => setSettingsOpen(true)}
           onBack={
-            (gameMode === 'single' && gamePhase !== 'idle') ||
-            gameMode === 'multi'
+            gameMode === 'single' || gameMode === 'multi'
               ? () => {
                   if (gameMode === 'multi') {
                     handleLeaveMultiplayer();
                   } else {
-                    useGameStore.getState().resetGame();
+                    resetGame();
                     setGameMode(null);
                   }
                 }

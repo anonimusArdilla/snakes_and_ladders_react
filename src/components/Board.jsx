@@ -5,14 +5,15 @@
  * snake/ladder indicators, and player tokens.
  * Supports both single-player (from store) and multiplayer (from props).
  * Shows colored arrows — red for snakes, green for ladders.
+ * Supports clickable tiles for manual mode (user moves piece).
  */
-import React, { memo, useMemo } from 'react';
+import React, { memo, useMemo, useCallback } from 'react';
 import { BOARD_SIZE, SNAKES, LADDERS, getTilePosition } from '../domain/board.js';
 import { useGameStore } from '../store/gameStore.js';
+import { useSettingsStore } from '../store/settingsStore.js';
 
-// Issue 6 fix: Derive grid size from BOARD_SIZE instead of hardcoding 10
-const GRID_COLS = Math.sqrt(BOARD_SIZE); // 10 for standard board
-const GRID_ROWS = Math.sqrt(BOARD_SIZE); // 10 for standard board
+const GRID_COLS = Math.sqrt(BOARD_SIZE);
+const GRID_ROWS = Math.sqrt(BOARD_SIZE);
 
 // Generate all tile numbers in board order (bottom-left to top-right, zigzag)
 function generateBoardTiles() {
@@ -26,10 +27,11 @@ function generateBoardTiles() {
     if (row % 2 === 1) rowTiles.reverse();
     tiles.push(rowTiles);
   }
-  return tiles.reverse(); // Display top-to-bottom
+  return tiles.reverse();
 }
 
-function getTileColor(tile) {
+function getTileColor(tile, isManualMode, validMoves) {
+  if (isManualMode && validMoves.includes(tile)) return 'var(--tile-valid-move)';
   if (SNAKES[tile]) return 'var(--tile-snake)';
   if (LADDERS[tile]) return 'var(--tile-ladder)';
   if (tile === 1) return 'var(--tile-start)';
@@ -37,17 +39,36 @@ function getTileColor(tile) {
   return tile % 2 === 0 ? 'var(--tile-even)' : 'var(--tile-odd)';
 }
 
-// Issue 8/18 fix: Memoize individual tile to prevent full re-render on every dice roll
-const Tile = memo(function Tile({ tile, playerTile, aiTile, gamePhase }) {
+const Tile = memo(function Tile({ tile, playerTile, aiTile, gamePhase, isManualMode, validMoves, awaitingSelection, onTileClick }) {
   const isPlayer = playerTile === tile && gamePhase !== 'idle';
   const isAi = aiTile === tile && gamePhase !== 'idle';
   const hasSnake = SNAKES[tile];
   const hasLadder = LADDERS[tile];
+  const isValidMove = validMoves.includes(tile);
+  const isClickable = isManualMode && awaitingSelection && isValidMove;
+
+  const handleClick = useCallback(() => {
+    if (isClickable && onTileClick) {
+      onTileClick(tile);
+    }
+  }, [isClickable, onTileClick, tile]);
+
+  const handleKeyDown = useCallback((e) => {
+    if (isClickable && onTileClick && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      onTileClick(tile);
+    }
+  }, [isClickable, onTileClick, tile]);
 
   return (
     <div
-      className={`tile ${hasSnake ? 'tile-snake' : ''} ${hasLadder ? 'tile-ladder' : ''}`}
-      style={{ backgroundColor: getTileColor(tile) }}
+      className={`tile ${hasSnake ? 'tile-snake' : ''} ${hasLadder ? 'tile-ladder' : ''} ${isValidMove ? 'tile-valid-move' : ''} ${isClickable ? 'tile-clickable' : ''}`}
+      style={{ backgroundColor: getTileColor(tile, isManualMode, validMoves) }}
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
+      role={isClickable ? 'button' : undefined}
+      tabIndex={isClickable ? 0 : undefined}
+      aria-label={isClickable ? `Move to tile ${tile}` : undefined}
     >
       <span className="tile-number">{tile}</span>
 
@@ -72,28 +93,22 @@ const Tile = memo(function Tile({ tile, playerTile, aiTile, gamePhase }) {
 
 /**
  * Renders colored curved arrows over the board to show snake and ladder connections.
- * Red curved arrows for snakes (sliding down), green curved arrows for ladders (climbing up).
- * Uses SVG cubic bezier paths positioned over the grid.
  */
 const BoardArrows = memo(function BoardArrows() {
   const arrows = useMemo(() => {
     const result = [];
 
-    // Snakes — red curved arrows from head tile to tail tile
     for (const [from, to] of Object.entries(SNAKES)) {
       const fromPos = getTilePosition(parseInt(from));
       const toPos = getTilePosition(to);
-      // Percentage coordinates (0–100) for viewBox
       const x1 = fromPos.col * 10 + 5;
       const y1 = fromPos.row * 10 + 5;
       const x2 = toPos.col * 10 + 5;
       const y2 = toPos.row * 10 + 5;
-      // Control point offset for a smooth organic curve
       const midX = (x1 + x2) / 2;
       const midY = (y1 + y2) / 2;
       const dx = x2 - x1;
       const dy = y2 - y1;
-      // Perpendicular offset for the control point — creates a smooth arc
       const perpDist = Math.max(Math.abs(dx), Math.abs(dy)) * 0.4;
       const cx = midX - dy * (perpDist / Math.sqrt(dx * dx + dy * dy || 1));
       const cy = midY + dx * (perpDist / Math.sqrt(dx * dx + dy * dy || 1));
@@ -101,7 +116,6 @@ const BoardArrows = memo(function BoardArrows() {
       result.push({ d, type: 'snake' });
     }
 
-    // Ladders — green curved arrows from bottom tile to top tile
     for (const [from, to] of Object.entries(LADDERS)) {
       const fromPos = getTilePosition(parseInt(from));
       const toPos = getTilePosition(to);
@@ -109,12 +123,10 @@ const BoardArrows = memo(function BoardArrows() {
       const y1 = fromPos.row * 10 + 5;
       const x2 = toPos.col * 10 + 5;
       const y2 = toPos.row * 10 + 5;
-      // Control point offset for a smooth organic curve
       const midX = (x1 + x2) / 2;
       const midY = (y1 + y2) / 2;
       const dx = x2 - x1;
       const dy = y2 - y1;
-      // Perpendicular offset for the control point — creates a smooth arc
       const perpDist = Math.max(Math.abs(dx), Math.abs(dy)) * 0.4;
       const cx = midX + dy * (perpDist / Math.sqrt(dx * dx + dy * dy || 1));
       const cy = midY - dx * (perpDist / Math.sqrt(dx * dx + dy * dy || 1));
@@ -128,26 +140,10 @@ const BoardArrows = memo(function BoardArrows() {
   return (
     <svg className="board-svg-overlay" viewBox="0 0 100 100" aria-hidden="true">
       <defs>
-        <marker
-          id="board-arrow-snake"
-          viewBox="0 0 10 10"
-          refX="9"
-          refY="5"
-          markerWidth="6"
-          markerHeight="6"
-          orient="auto"
-        >
+        <marker id="board-arrow-snake" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
           <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--tile-snake)" />
         </marker>
-        <marker
-          id="board-arrow-ladder"
-          viewBox="0 0 10 10"
-          refX="9"
-          refY="5"
-          markerWidth="6"
-          markerHeight="6"
-          orient="auto"
-        >
+        <marker id="board-arrow-ladder" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
           <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--tile-ladder)" />
         </marker>
       </defs>
@@ -167,21 +163,46 @@ const BoardArrows = memo(function BoardArrows() {
   );
 });
 
-const Board = memo(function Board({ playerTile: propPlayerTile, aiTile: propAiTile, gamePhase: propGamePhase } = {}) {
+const Board = memo(function Board({
+  playerTile: propPlayerTile,
+  aiTile: propAiTile,
+  gamePhase: propGamePhase,
+  manualMode = false,
+  manualAwaitingSelection = false,
+  manualAvailableMoves = [],
+  onTileClick,
+} = {}) {
   const storePlayerTile = useGameStore((s) => s.playerTile);
   const storeAiTile = useGameStore((s) => s.aiTile);
   const storeGamePhase = useGameStore((s) => s.gamePhase);
 
-  // Use props (multiplayer) or store (single-player)
+  // When no props, read from store (normal single-player mode)
+  const isManualMode = manualMode || useSettingsStore((s) => s.manualMode);
+
   const playerTile = propPlayerTile !== undefined ? propPlayerTile : storePlayerTile;
   const aiTile = propAiTile !== undefined ? propAiTile : storeAiTile;
   const gamePhase = propGamePhase || storeGamePhase;
+
+  // In manual mode with props from App, use those props; otherwise use store
+  const awaitingSelection = isManualMode
+    ? (manualAwaitingSelection !== false ? manualAwaitingSelection : false)
+    : false;
+  const validMoves = isManualMode ? manualAvailableMoves : [];
+
+  // Get store's manual mode state if props not provided (standalone use)
+  const storeManualAwaiting = useGameStore((s) => s.manualAwaitingSelection);
+  const storeAvailableMoves = useGameStore((s) => s.manualAvailableMoves);
+  const storeOnTileClick = useGameStore((s) => s.movePlayerToTile);
+
+  const effectiveAwaiting = propPlayerTile === undefined ? storeManualAwaiting : awaitingSelection;
+  const effectiveMoves = propPlayerTile === undefined ? storeAvailableMoves : validMoves;
+  const effectiveOnTileClick = onTileClick || (isManualMode ? storeOnTileClick : undefined);
 
   const boardTiles = useMemo(generateBoardTiles, []);
 
   return (
     <div className="board-container">
-      <div className="board">
+      <div className={`board ${effectiveAwaiting ? 'board-select-mode' : ''}`}>
         <BoardArrows />
         {boardTiles.map((row, rowIdx) => (
           <div key={rowIdx} className="board-row">
@@ -192,6 +213,10 @@ const Board = memo(function Board({ playerTile: propPlayerTile, aiTile: propAiTi
                 playerTile={playerTile}
                 aiTile={aiTile}
                 gamePhase={gamePhase}
+                isManualMode={isManualMode}
+                validMoves={effectiveMoves}
+                awaitingSelection={effectiveAwaiting}
+                onTileClick={effectiveOnTileClick}
               />
             ))}
           </div>
