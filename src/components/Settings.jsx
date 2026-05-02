@@ -6,7 +6,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from '../store/settingsStore.js';
-import { useGameStore } from '../store/gameStore.js';
 
 const LANGUAGES = [
   { code: 'en', label: 'English', flag: '🇬🇧' },
@@ -20,11 +19,7 @@ export default function Settings({ onClose }) {
   const setTheme = useSettingsStore((s) => s.setTheme);
   const soundEnabled = useSettingsStore((s) => s.soundEnabled);
   const toggleSound = useSettingsStore((s) => s.toggleSound);
-  const manualMode = useSettingsStore((s) => s.manualMode);
-  const toggleManualMode = useSettingsStore((s) => s.toggleManualMode);
   const setLanguage = useSettingsStore((s) => s.setLanguage);
-  const gamePhase = useGameStore((s) => s.gamePhase);
-  const isGameActive = gamePhase !== 'idle';
 
   const handleLanguageChange = (code) => {
     setLanguage(code);
@@ -69,28 +64,6 @@ export default function Settings({ onClose }) {
               </button>
             ))}
           </div>
-        </div>
-
-        {/* Manual Mode */}
-        <div className="settings-group">
-          <label className="settings-label">{t('settings.manualMode')}</label>
-          <div className="settings-toggle-group">
-            <button
-              className={`btn-toggle ${!manualMode ? 'active' : ''}`}
-              onClick={() => manualMode && toggleManualMode()}
-              disabled={isGameActive}
-            >
-              🤖 {t('settings.manualMode.auto')}
-            </button>
-            <button
-              className={`btn-toggle ${manualMode ? 'active' : ''}`}
-              onClick={() => !manualMode && toggleManualMode()}
-              disabled={isGameActive}
-            >
-              🖱️ {t('settings.manualMode.manual')}
-            </button>
-          </div>
-          <p className="settings-hint">{t('settings.manualMode.hint')}</p>
         </div>
 
         {/* Sound */}

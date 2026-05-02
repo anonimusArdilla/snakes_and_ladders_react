@@ -63,18 +63,27 @@ function removePlayer(ws) {
     const idx = room.players.findIndex((p) => p.ws === ws);
     if (idx === -1) continue;
 
+    const leavingPlayerId = room.players[idx].id;
     room.players.splice(idx, 1);
 
     if (room.players.length === 0) {
       rooms.delete(roomId);
     } else {
-      // Notify remaining player
+      // Only overwrite winner if the game wasn't already won legitimately
+      const wasAlreadyFinished = room.state.gamePhase === 'finished';
       room.state.gamePhase = 'finished';
-      room.state.winner = room.players[0].id;
+      if (!wasAlreadyFinished) {
+        room.state.winner = room.players[0].id;
+      }
+      // If the game was already over, tell the remaining player the opponent left
+      // but preserve the original winner
+      const message = wasAlreadyFinished
+        ? 'Opponent disconnected.'
+        : 'Opponent disconnected. You win!';
       sendToRoom(room, {
         type: 'player_left',
         state: room.state,
-        message: 'Opponent disconnected. You win!',
+        message,
       });
     }
     return;
@@ -368,6 +377,30 @@ wss.on('connection', (ws) => {
           break;
         }
         handleSelectTile(ws, currentRoom, msg.selectedTile);
+        break;
+      }
+
+      case 'chat_message': {
+        if (!currentRoom) {
+          send(ws, { type: 'error', message: 'Not in a room' });
+          break;
+        }
+        const sender = currentRoom.players.find((p) => p.ws === ws);
+        if (!sender) {
+          send(ws, { type: 'error', message: 'Not in room' });
+          break;
+        }
+        const text = typeof msg.text === 'string' ? msg.text.trim() : '';
+        if (!text || text.length > 500) break; // reject empty or oversized
+        sendToRoom(currentRoom, {
+          type: 'chat_message',
+          id: randomUUID(),
+          roomId: currentRoom.id,
+          senderId: sender.id,
+          senderName: sender.name,
+          text,
+          timestamp: Date.now(),
+        });
         break;
       }
 

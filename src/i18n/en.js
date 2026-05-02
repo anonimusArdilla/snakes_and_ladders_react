@@ -73,6 +73,12 @@ export default {
   'mp.oppTurn': "⏳ Opponent's turn…",
   'mp.back': '← Back',
 
+  // Chat
+  'chat.title': 'Chat',
+  'chat.input.placeholder': 'Type a message…',
+  'chat.send': 'Send',
+  'chat.empty': 'No messages yet. Say hello!',
+
   // Misc
   'misc.tile': 'Tile',
   'misc.of': 'of',

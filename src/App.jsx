@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useGameStore } from './store/gameStore.js';
 import { useSettingsStore } from './store/settingsStore.js';
 import { useMultiplayer } from './hooks/useMultiplayer.js';
+import { useChat } from './hooks/useChat.js';
 import Header from './components/Header.jsx';
 import StartScreen from './components/StartScreen.jsx';
 import Board from './components/Board.jsx';
@@ -16,6 +17,7 @@ import Settings from './components/Settings.jsx';
 import MultiplayerLobby from './components/MultiplayerLobby.jsx';
 import MultiplayerStatus from './components/MultiplayerStatus.jsx';
 import MultiplayerGameOver from './components/MultiplayerGameOver.jsx';
+import ChatContainer from './components/chat/ChatContainer.jsx';
 
 export default function App() {
   const { i18n } = useTranslation();
@@ -44,6 +46,10 @@ export default function App() {
   const [gameMode, setGameMode] = useState(null); // null | 'single' | 'multi'
 
   const mp = useMultiplayer(manualMode);
+
+  // Chat — only active during multiplayer
+  const chat = useChat(mp.wsRef, mp.playerId, mp.roomId);
+  const [chatCollapsed, setChatCollapsed] = useState(true);
 
   // Sync language on mount
   useEffect(() => {
@@ -84,46 +90,8 @@ export default function App() {
   // ─── Determine what to render ──────────────────────────────
 
   const renderContent = () => {
-    // Multiplayer game in progress
+    // Multiplayer game in progress (playing or finished)
     if (gameMode === 'multi' && mp.gameState && (mp.gamePhase === 'playing' || mp.gamePhase === 'finished')) {
-      if (mp.gamePhase === 'finished') {
-        return (
-          <>
-            <div className="game-layout">
-              <div className="game-sidebar">
-                <MultiplayerStatus
-                  gameState={mp.gameState}
-                  playerId={mp.playerId}
-                  players={mp.players}
-                  isMyTurn={mp.isMyTurn}
-                  myTile={mp.myTile}
-                  opponentTile={mp.opponentTile}
-                  winner={mp.winner}
-                  gamePhase={mp.gamePhase}
-                  shareUrl={mp.shareUrl}
-                  roomId={mp.roomId}
-                  eventLog={mp.eventLog}
-                  onLeave={handleLeaveMultiplayer}
-                />
-              </div>
-              <div className="game-board">
-                <Board
-                  playerTile={mp.amIPlayer1 ? mp.gameState.player1Tile : mp.gameState.player2Tile}
-                  aiTile={mp.amIPlayer1 ? mp.gameState.player2Tile : mp.gameState.player1Tile}
-                  gamePhase={mp.gamePhase}
-                />
-              </div>
-            </div>
-            <MultiplayerGameOver
-              gameState={mp.gameState}
-              playerId={mp.playerId}
-              winner={mp.winner}
-              onLeave={handleLeaveMultiplayer}
-            />
-          </>
-        );
-      }
-
       return (
         <div className="game-layout">
           <div className="game-sidebar">
@@ -141,28 +109,30 @@ export default function App() {
               eventLog={mp.eventLog}
               onLeave={handleLeaveMultiplayer}
             />
-            <Dice
-              isRolling={false}
-              diceValue={mp.gameState.diceValue}
-              onRoll={mp.rollDice}
-              canRoll={mp.isMyTurn && mp.gamePhase === 'playing' && mp.manualDiceValue === null}
-              isMultiplayer
-              isAiThinking={!mp.isMyTurn}
-              manualMode={mp.manualMode}
-              manualAwaitingSelection={mp.manualMode && mp.manualDiceValue !== null}
-              manualMistakeCount={mp.manualMistakeCount}
-              manualLastPenalty={mp.manualLastPenalty}
-            />
+            {mp.gamePhase === 'playing' && (
+              <Dice
+                isRolling={false}
+                diceValue={mp.gameState.diceValue}
+                onRoll={mp.rollDice}
+                canRoll={mp.isMyTurn && mp.gamePhase === 'playing' && mp.manualDiceValue === null}
+                isMultiplayer
+                isAiThinking={!mp.isMyTurn}
+                manualMode={mp.manualMode}
+                manualAwaitingSelection={mp.manualMode && mp.manualDiceValue !== null}
+                manualMistakeCount={mp.manualMistakeCount}
+                manualLastPenalty={mp.manualLastPenalty}
+              />
+            )}
           </div>
           <div className="game-board">
             <Board
               playerTile={mp.amIPlayer1 ? mp.gameState.player1Tile : mp.gameState.player2Tile}
               aiTile={mp.amIPlayer1 ? mp.gameState.player2Tile : mp.gameState.player1Tile}
               gamePhase={mp.gamePhase}
-              manualMode={mp.manualMode}
-              manualAwaitingSelection={mp.manualMode && mp.manualDiceValue !== null}
+              manualMode={mp.manualMode && mp.gamePhase === 'playing'}
+              manualAwaitingSelection={mp.manualMode && mp.gamePhase === 'playing' && mp.manualDiceValue !== null}
               manualAvailableMoves={mp.manualAvailableMoves}
-              onTileClick={mp.manualMode && mp.manualDiceValue !== null ? mp.selectTile : undefined}
+              onTileClick={mp.manualMode && mp.gamePhase === 'playing' && mp.manualDiceValue !== null ? mp.selectTile : undefined}
             />
           </div>
         </div>
@@ -256,8 +226,32 @@ export default function App() {
         {/* Single-player game over */}
         {gameMode === 'single' && <GameOver />}
 
+        {/* Multiplayer game over — rendered outside renderContent so it survives state transitions */}
+        {gameMode === 'multi' && mp.gameState && mp.gamePhase === 'finished' && mp.winner && (
+          <MultiplayerGameOver
+            gameState={mp.gameState}
+            playerId={mp.playerId}
+            winner={mp.winner}
+            onLeave={handleLeaveMultiplayer}
+          />
+        )}
+
         {/* Settings */}
         {settingsOpen && <Settings onClose={() => setSettingsOpen(false)} />}
+
+        {/* Chat — shown only when both players have joined the room */}
+        {gameMode === 'multi' && mp.players.length >= 2 && (
+          <ChatContainer
+            messages={chat.messages}
+            unreadCount={chat.unreadCount}
+            sendMessage={chat.sendMessage}
+            markSeen={chat.markSeen}
+            playerId={mp.playerId}
+            connectionStatus={mp.connectionStatus}
+            isCollapsed={chatCollapsed}
+            onToggle={() => setChatCollapsed((prev) => !prev)}
+          />
+        )}
       </div>
     </div>
   );

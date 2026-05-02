@@ -73,6 +73,12 @@ export default {
   'mp.oppTurn': '⏳ Turno del oponente…',
   'mp.back': '← Volver',
 
+  // Chat
+  'chat.title': 'Chat',
+  'chat.input.placeholder': 'Escribe un mensaje…',
+  'chat.send': 'Enviar',
+  'chat.empty': 'No hay mensajes aún. ¡Saluda!',
+
   'misc.tile': 'Casilla',
   'misc.de': 'de',
 };

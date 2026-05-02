@@ -66,6 +66,12 @@ export default {
   'mp.oppTurn': '⏳ 对手回合…',
   'mp.back': '← 返回',
 
+  // Chat
+  'chat.title': '聊天',
+  'chat.input.placeholder': '输入消息…',
+  'chat.send': '发送',
+  'chat.empty': '暂无消息。打个招呼吧！',
+
   'misc.tile': '格子',
   'misc.of': '/',
 };

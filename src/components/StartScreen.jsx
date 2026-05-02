@@ -6,12 +6,15 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStatsStore } from '../store/statsStore.js';
+import { useSettingsStore } from '../store/settingsStore.js';
 
 export default function StartScreen({ onStartSingle, onStartMulti }) {
   const { t } = useTranslation();
   const wins = useStatsStore((s) => s.wins);
   const losses = useStatsStore((s) => s.losses);
   const games = wins + losses;
+  const manualMode = useSettingsStore((s) => s.manualMode);
+  const toggleManualMode = useSettingsStore((s) => s.toggleManualMode);
 
   return (
     <div className="start-screen">
@@ -44,6 +47,25 @@ export default function StartScreen({ onStartSingle, onStartMulti }) {
           <button className="btn btn-accent btn-start" onClick={onStartMulti}>
             🌐 Online
           </button>
+        </div>
+
+        {/* Manual Mode Toggle — only affects single-player */}
+        <div className="start-manual-toggle">
+          <span className="start-manual-label">{t('settings.manualMode')}</span>
+          <div className="settings-toggle-group">
+            <button
+              className={`btn-toggle ${!manualMode ? 'active' : ''}`}
+              onClick={() => manualMode && toggleManualMode()}
+            >
+              🤖 {t('settings.manualMode.auto')}
+            </button>
+            <button
+              className={`btn-toggle ${manualMode ? 'active' : ''}`}
+              onClick={() => !manualMode && toggleManualMode()}
+            >
+              🖱️ {t('settings.manualMode.manual')}
+            </button>
+          </div>
         </div>
 
         {games > 0 && (

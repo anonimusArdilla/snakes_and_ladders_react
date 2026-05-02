@@ -6,6 +6,10 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+/**
+ * @typedef {function(object):void} MessageHandler
+ */
+
 // Issue 4 fix: WS_URL configurable via environment variable
 const WS_URL = import.meta.env.VITE_WS_URL ||
   (() => {
@@ -20,7 +24,7 @@ export const CONNECTION_TIMEOUT_MS = 10000;
 export const HEARTBEAT_INTERVAL_MS = 30000;
 export const HEARTBEAT_TIMEOUT_MS = 5000;
 
-export function useMultiplayer(manualModeEnabled = false) {
+export function useMultiplayer(manualModeEnabled = false, externalHandlers = null) {
   const wsRef = useRef(null);
   const reconnectAttempt = useRef(0);
   const reconnectTimer = useRef(null);
@@ -40,6 +44,10 @@ export function useMultiplayer(manualModeEnabled = false) {
   const [error, setError] = useState(null);
   const [eventLog, setEventLog] = useState([]);
   const [roomManualMode, setRoomManualMode] = useState(false);
+
+  // ─── Pub/sub for external message handlers (useChat, etc.) ──
+  const handlersRef = useRef(externalHandlers);
+  handlersRef.current = externalHandlers;
 
   // Keep ref in sync with state — Issue 3 fix
   playerIdRef.current = playerId;
@@ -162,6 +170,17 @@ export function useMultiplayer(manualModeEnabled = false) {
         case 'pong':
           clearTimeout(ws._pongTimeout);
           heartbeatFailures.current = 0;
+          break;
+
+        default:
+          // Forward chat messages to useChat's handler attached on ws._chatHandler
+          if (msg.type === 'chat_message' && ws._chatHandler) {
+            ws._chatHandler(msg);
+          }
+          // Also forward to external handlers registered by type
+          if (handlersRef.current?.[msg.type]) {
+            handlersRef.current[msg.type](msg);
+          }
           break;
       }
     };
@@ -308,6 +327,9 @@ export function useMultiplayer(manualModeEnabled = false) {
     manualMistakeCount,
     manualLastPenalty,
     manualMode: connectionStatus === 'in_room' ? roomManualMode : manualModeEnabled,
+
+    // WebSocket ref — exposed for external consumers (e.g., useChat)
+    wsRef,
 
     // UI
     error,
